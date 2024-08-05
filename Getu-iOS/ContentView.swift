@@ -5,62 +5,69 @@
 //  Created by 大桥 on 2024/8/5.
 //
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+  @Environment(\.modelContext) private var modelContext
+  @Query private var records: [TransactionRecord]
 
-    var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
-            }
-#if os(macOS)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-#endif
-            .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-#endif
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-        } detail: {
-            Text("Select an item")
-        }
-    }
+  let stores = ["店铺一", "店铺二"]
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
+  var groupedRecords: [String: [TransactionRecord]] {
+    Dictionary(grouping: records) { record in
+      let dateFormatter = DateFormatter()
+      dateFormatter.dateFormat = "yyyy年MM月"
+      return dateFormatter.string(from: record.date)
     }
+  }
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+  var sortedMonths: [String] {
+    groupedRecords.keys.sorted(by: >)
+  }
+
+  var body: some View {
+    NavigationView {
+      List {
+        ForEach(sortedMonths, id: \.self) { month in
+          Section(header: Text(month)) {
+            ForEach(groupedRecords[month] ?? []) { record in
+              NavigationLink(destination: RecordDetailView(record: record, stores: stores)) {
+                RecordRow(record: record, stores: stores)
+              }
             }
+            .onDelete { indexSet in
+              deleteItems(at: indexSet, in: month)
+            }
+          }
         }
+      }
+      .navigationTitle("进货记录")
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          EditButton()
+        }
+        ToolbarItem {
+          NavigationLink(destination: TransactionRecordPage()) {
+            Label("添加记录", systemImage: "plus")
+          }
+        }
+      }
     }
+  }
+
+  private func deleteItems(at offsets: IndexSet, in month: String) {
+    withAnimation {
+      for index in offsets {
+        if let record = groupedRecords[month]?[index] {
+          modelContext.delete(record)
+        }
+      }
+    }
+  }
 }
 
 #Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+  ContentView()
+    .modelContainer(for: TransactionRecord.self, inMemory: true)
 }
